@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDA 10.º Ano — Estúdio Diédrico & Gerador de Enunciados</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body { font-family: 'Inter', sans-serif; user-select: none; overflow: hidden; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .epura-svg { cursor: crosshair; background: #ffffff; }
+    .epura-svg.mode-select { cursor: default; }
+    .handle-point { cursor: grab; transition: r 0.12s ease; }
+    .handle-point:hover { r: 2.4px; }
+    .handle-point:active { cursor: grabbing; }
+    .entity-highlight { filter: drop-shadow(0 0 2px rgba(234, 88, 12, 0.85)); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 h-screen flex flex-col">
+
+  <!-- TOP HEADER & WORKSPACE CONTROLS -->
+  <header class="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-b border-slate-700 shrink-0 z-20">
+    <div class="flex items-center gap-3">
+      <div class="bg-orange-500 text-white font-bold text-xs px-2 py-1 rounded tracking-wider">GDA 10.º ANO</div>
+      <div>
+        <h1 class="font-semibold text-sm leading-tight">Estúdio Diédrico & Construtor de Enunciados</h1>
+        <p class="text-[11px] text-slate-400">Dupla Projeção Ortogonal • Folha 1:1 (-15 a +15 cm) • Patrícia Rocha & Pedro Amado</p>
+      </div>
+    </div>
+
+    <!-- VIEWPORT LAYOUT SWITCHER (FULL SCREEN / SPLIT / COLLAPSE) -->
+    <div class="flex items-center gap-1.5 bg-slate-800 p-1 rounded-lg border border-slate-700">
+      <button id="btnViewSplit" onclick="setLayoutMode('split')" class="px-2.5 py-1 rounded text-xs font-medium bg-orange-600 text-white transition">
+        ⊞ Vista Dividida (Épura + 3D)
+      </button>
+      <button id="btnViewEpura" onclick="setLayoutMode('epura')" class="px-2.5 py-1 rounded text-xs font-medium text-slate-300 hover:text-white transition" title="Modo preferencial de inserção com o rato">
+        ⛶ Épura Diédrica (Full Screen)
+      </button>
+      <button id="btnView3D" onclick="setLayoutMode('3d')" class="px-2.5 py-1 rounded text-xs font-medium text-slate-300 hover:text-white transition">
+        ⛶ Espaço 3D (Full Screen)
+      </button>
+      <div class="h-4 w-px bg-slate-600 mx-1"></div>
+      <button id="btnToggleSidebar" onclick="toggleSidebar()" class="px-2.5 py-1 rounded text-xs font-medium bg-slate-700 text-slate-200 hover:bg-slate-600 transition">
+        ⇥ Colapsar Painel
+      </button>
+    </div>
+
+    <!-- EXPORT & PRESETS -->
+    <div class="flex items-center gap-2">
+      <select id="presetSelect" onchange="loadPreset(this.value)" class="bg-slate-800 text-slate-200 text-xs px-2.5 py-1.5 rounded border border-slate-700">
+        <option value="default">Exemplo 1: Reta a [A, B] e Traço Frontal F</option>
+        <option value="intersecao">Exemplo 2: Interseção Reta r ∩ Plano α</option>
+        <option value="concorrentes">Exemplo 3: Retas Concorrentes r ∩ s</option>
+      </select>
+      <button onclick="exportDualPack()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded shadow flex items-center gap-1.5 transition">
+        ⬇ Exportar Pack 1:1 (Aluno + Prof)
+      </button>
+    </div>
+  </header>
+
+  <!-- SUB-TOOLBAR: DRAWING TOOLS & GRID SNAP -->
+  <div class="bg-white border-b border-slate-200 px-4 py-1.5 flex items-center justify-between text-xs shrink-0 z-10">
+    <div class="flex items-center gap-2">
+      <span class="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Modo Rato na Épura:</span>
+      <button id="toolSelect" onclick="setMouseTool('select')" class="px-2.5 py-1 rounded font-medium bg-slate-900 text-white transition">
+        ↖ Selecionar / Arrastar Projeções
+      </button>
+      <button id="toolInsertPoint" onclick="setMouseTool('point')" class="px-2.5 py-1 rounded font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+        + Inserir Ponto na Épura (2 Cliques: A₁ → A₂)
+      </button>
+      <span id="insertStatusBadge" class="hidden bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-medium">
+        1.º Clique: Marcar projeção horizontal A₁ (define x e afastamento y)
+      </span>
+    </div>
+
+    <div class="flex items-center gap-4">
+      <label class="flex items-center gap-1.5 cursor-pointer text-slate-700">
+        <input type="checkbox" id="chkSnap" checked onchange="state.snap05 = this.checked" class="rounded text-orange-600" />
+        <span>Snap 0,5 cm</span>
+      </label>
+      <label class="flex items-center gap-1.5 cursor-pointer text-slate-700">
+        <input type="checkbox" id="chkGrid" checked onchange="state.showGrid = this.checked; renderAll()" class="rounded text-orange-600" />
+        <span>Grelha (-15 a +15 cm)</span>
+      </label>
+      <label class="flex items-center gap-1.5 cursor-pointer text-slate-700">
+        <input type="checkbox" id="chkPreviewStudent" onchange="state.previewStudentSheet = this.checked; renderAll()" class="rounded text-orange-600" />
+        <span class="font-medium text-orange-700">Pré-visualizar Folha do Aluno</span>
+      </label>
+      <div id="cursorCoords" class="mono text-[11px] bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200 text-slate-700 min-w-[185px] text-right">
+        x: 0.0 | y/z: 0.0 cm
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN WORKSPACE -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- LEFT/CENTER VIEWPORTS CONTAINER -->
+    <div id="viewportsWrapper" class="flex-1 grid grid-cols-2 gap-0 overflow-hidden bg-slate-200">
+
+      <!-- VIEWPORT 1: 2D DIHEDRAL (ÉPURA) -->
+      <div id="panelEpura" class="relative bg-slate-100 flex flex-col items-center justify-center overflow-hidden border-r border-slate-300 p-2">
+        <div class="absolute top-3 left-3 bg-white/90 backdrop-blur px-2.5 py-1 rounded shadow-sm border border-slate-200 text-[11px] flex items-center gap-2 z-10">
+          <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+          <strong>Épura Diédrica (2D)</strong>
+          <span class="text-slate-400">|</span>
+          <span class="text-slate-600">+X Esquerda • +Z Cima (A₂) • +Y Baixo (A₁)</span>
+        </div>
+
+        <div class="w-full h-full flex items-center justify-center overflow-hidden">
+          <!-- ViewBox: -160 to +160 mm (10 units = 1 cm; -150 to +150 is -15cm to +15cm) -->
+          <svg id="epuraSvg" viewBox="-162 -162 324 324" class="epura-svg mode-select max-w-full max-h-full shadow-lg border border-slate-300 rounded">
+            <g id="svgGridLayer"></g>
+            <g id="svgAxisLayer"></g>
+            <g id="svgConstructionLayer"></g>
+            <g id="svgProjectionsLayer"></g>
+            <g id="svgSolutionLayer"></g>
+            <g id="svgInteractiveLayer"></g>
+            <g id="svgLabelsLayer"></g>
+          </svg>
+        </div>
+      </div>
+
+      <!-- VIEWPORT 2: 3D SPATIAL DIHEDRONS VIEW -->
+      <div id="panel3D" class="relative bg-slate-900 flex flex-col overflow-hidden">
+        <div class="absolute top-3 left-3 bg-slate-800/90 backdrop-blur text-slate-100 px-2.5 py-1 rounded border border-slate-700 text-[11px] flex items-center gap-2 z-10">
+          <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+          <strong>Espaço 3D (Diedros φ₀ e ν₀)</strong>
+          <span class="text-slate-400">|</span>
+          <span class="text-slate-300">Arrasta para rodar a câmara</span>
+        </div>
+
+        <!-- Pedagogical Rebatimento Slider -->
+        <div class="absolute bottom-3 left-3 right-3 bg-slate-800/95 backdrop-blur text-white px-3 py-2 rounded-lg border border-slate-700 flex items-center justify-between gap-4 z-10">
+          <div class="text-xs">
+            <span class="font-semibold text-sky-400">Rebatimento do Plano Horizontal (ν₀):</span>
+            <span id="rebAngleLabel" class="mono ml-1 bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">0° (Espaço 3D)</span>
+          </div>
+          <input type="range" id="rebSlider" min="0" max="90" value="0" oninput="updateRebatimento(this.value)" class="flex-1 accent-sky-400 cursor-pointer" />
+          <button onclick="toggleRebatimentoAnim()" class="bg-sky-600 hover:bg-sky-500 text-xs font-medium px-2.5 py-1 rounded transition">
+            Alternar 0° / 90°
+          </button>
+        </div>
+
+        <canvas id="canvas3D" class="w-full h-full cursor-move"></canvas>
+      </div>
+
+    </div>
+
+    <!-- RIGHT SIDEBAR: PATRÍCIA'S FORM BUILDER + INSPECTOR + STATEMENT GENERATOR -->
+    <aside id="rightSidebar" class="w-[430px] bg-white border-l border-slate-300 flex flex-col h-full shrink-0 shadow-xl z-10 transition-all">
+
+      <!-- ADD ELEMENT FORM BAR (PATRÍCIA'S BLOCK BUILDER) -->
+      <div class="p-3 bg-slate-50 border-b border-slate-200">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Construtor de Elementos (Form Builder)</span>
+          <span class="text-[11px] text-slate-400">Clique num bloco para destacar</span>
+        </div>
+        <div class="flex gap-1.5">
+          <select id="newBlockType" class="flex-1 bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-orange-500">
+            <option value="point">+ Ponto — P (x; y; z)</option>
+            <option value="line">+ Reta — União de 2 Pontos [A, B]</option>
+            <option value="plane">+ Plano — Por 3 Pontos ou Traços (fα, hα)</option>
+            <option value="intersection">+ Interseção — (Reta ∩ Plano ou Reta ∩ Reta)</option>
+          </select>
+          <button onclick="addBlockFromDropdown()" class="bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs px-3 py-1.5 rounded shadow-sm transition">
+            + Adicionar Bloco
+          </button>
+        </div>
+      </div>
+
+      <!-- DYNAMIC BLOCKS LIST -->
+      <div id="blocksContainer" class="flex-1 overflow-y-auto p-3 space-y-2.5 bg-slate-100/70"></div>
+
+      <!-- PEDAGOGICAL STATEMENT GENERATOR (GERADOR DE ENUNCIADOS) -->
+      <div class="border-t border-slate-300 bg-white p-3 flex flex-col gap-2 shrink-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700">Enunciado Gerado Automaticamente</h3>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="copyStatement()" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-2 py-0.5 rounded border border-slate-300 transition">
+              📋 Copiar Texto
+            </button>
+          </div>
+        </div>
+
+        <textarea id="statementOutput" rows="4" class="w-full text-xs leading-relaxed p-2.5 rounded border border-slate-300 bg-amber-50/40 text-slate-800 font-medium focus:outline-none focus:border-orange-500 resize-none"></textarea>
+
+        <div id="teacherSolutionSummary" class="mono text-[10px] bg-slate-900 text-emerald-300 px-2.5 py-1.5 rounded overflow-x-auto whitespace-nowrap"></div>
+      </div>
+
+    </aside>
+
+  </div>
+
+<script>
+/* ============================================================================
+   1. APPLICATION STATE & PORTUGUESE GDA 10TH GRADE MATHEMATICAL ENGINE
+   ============================================================================ */
+const state = {
+  layoutMode: 'split', // 'split' | 'epura' | '3d'
+  sidebarOpen: true,
+  mouseTool: 'select', // 'select' | 'point'
+  snap05: true,
+  showGrid: true,
+  previewStudentSheet: false,
+  selectedId: null,
+  rebatimentoDeg: 0,
+  pendingPointStep1: null, // { x, y } during 2-click point insertion
+  entities: []
+};
+
+// Coordinate conversion: 1 cm = 10 SVG units (1 SVG unit = 1 mm for 1:1 300mm export)
+const MM_PER_CM = 10;
+const MAX_CM = 15;
+
+function roundStep(val, step = 0.5) {
+  return Math.round(val / step) * step;
+}
+
+function fmt(n) {
+  if (n === undefined || n === null || isNaN(n)) return '0';
+  const r = Math.round(n * 100) / 100;
+  return r.toString().replace('.', ',');
+}
+
+// Convert Portuguese Dihedral (x, yOrZ) to 2D SVG coordinates
+// +X -> Left (-svgX), +Z -> Up (-svgY), +Y -> Down (+svgY)
+function toSvgA1(x, y) {
+  return { sx: -x * MM_PER_CM, sy: y * MM_PER_CM };
+}
+function toSvgA2(x, z) {
+  return { sx: -x * MM_PER_CM, sy: -z * MM_PER_CM };
+}
+
+function classifyPoint(p) {
+  const { x, y, z } = p;
+  if (y === 0 && z === 0) return 'Pertence ao eixo x';
+  if (y === 0) return 'No Plano Frontal φ₀';
+  if (z === 0) return 'No Plano Horizontal ν₀';
+  let d = '';
+  if (y > 0 && z > 0) d = '1.º Diedro';
+  else if (y < 0 && z > 0) d = '2.º Diedro';
+  else if (y < 0 && z < 0) d = '3.º Diedro';
+  else if (y > 0 && z < 0) d = '4.º Diedro';
+  if (Math.abs(y - z) < 1e-4) d += ' • β₁₃';
+  if (Math.abs(y + z) < 1e-4) d += ' • β₂₄';
+  return d;
+}
+
+function getEntity(id) {
+  return state.entities.find(e => e.id === id);
+}
+
+// Compute Line Traces F (y=0) and H (z=0) and clipping across sheet [-15, 15]
+function computeLineGeometry(lineEnt) {
+  const pA = getEntity(lineEnt.p1Id);
+  const pB = getEntity(lineEnt.p2Id);
+  if (!pA || !pB) return null;
+
+  const dx = pB.x - pA.x;
+  const dy = pB.y - pA.y;
+  const dz = pB.z - pA.z;
+
+  // Trace F: y = 0 => pA.y + t * dy = 0
+  let traceF = null;
+  if (Math.abs(dy) > 1e-6) {
+    const tF = -pA.y / dy;
+    traceF = {
+      x: pA.x + tF * dx,
+      y: 0,
+      z: pA.z + tF * dz
+    };
+  }
+
+  // Trace H: z = 0 => pA.z + t * dz = 0
+  let traceH = null;
+  if (Math.abs(dz) > 1e-6) {
+    const tH = -pA.z / dz;
+    traceH = {
+      x: pA.x + tH * dx,
+      y: pA.y + tH * dy,
+      z: 0
+    };
+  }
+
+  // Extended endpoints across canvas [-15, 15]
+  const pStart = { x: pA.x - dx * 6, y: pA.y - dy * 6, z: pA.z - dz * 6 };
+  const pEnd   = { x: pA.x + dx * 6, y: pA.y + dz * 0 + dy * 6, z: pA.z + dz * 6 };
+
+  return { pA, pB, dx, dy, dz, traceF, traceH, pStart, pEnd };
+}
+
+// Compute Plane equation n_x*x + n_y*y + n_z*z + d = 0 and traces f_alpha (y=0) and h_alpha (z=0)
+function computePlaneGeometry(planeEnt) {
+  if (planeEnt.mode === 'traces') {
+    // Defined by vertex X0 on x-axis and angles (deg) on sheet for f_alpha (up/left) and h_alpha (down/left)
+    const x0 = Number(planeEnt.x0) || 0;
+    const angF = (Number(planeEnt.angF) || 45) * Math.PI / 180;
+    const angH = (Number(planeEnt.angH) || 40) * Math.PI / 180;
+    // Point on f_alpha: x = x0 + 5*cos(angF), y = 0, z = 5*sin(angF)
+    // Point on h_alpha: x = x0 + 5*cos(angH), y = 5*sin(angH), z = 0
+    const P0 = { x: x0, y: 0, z: 0 };
+    const PF = { x: x0 + 10 * Math.cos(angF), y: 0, z: 10 * Math.sin(angF) };
+    const PH = { x: x0 + 10 * Math.cos(angH), y: 10 * Math.sin(angH), z: 0 };
+    return buildPlaneFrom3Points(P0, PF, PH);
+  } else {
+    const p1 = getEntity(planeEnt.p1Id);
+    const p2 = getEntity(planeEnt.p2Id);
+    const p3 = getEntity(planeEnt.p3Id);
+    if (!p1 || !p2 || !p3) return null;
+    return buildPlaneFrom3Points(p1, p2, p3);
+  }
+}
+
+function buildPlaneFrom3Points(p1, p2, p3) {
+  const u = { x: p2.x - p1.x, y: p2.y - p1.y, z: p2.z - p1.z };
+  const v = { x: p3.x - p1.x, y: p3.y - p1.y, z: p3.z - p1.z };
+  const nx = u.y * v.z - u.z * v.y;
+  const ny = u.z * v.x - u.x * v.z;
+  const nz = u.x * v.y - u.y * v.x;
+  const d = -(nx * p1.x + ny * p1.y + nz * p1.z);
+
+  // Frontal trace f_alpha (y = 0): nx * x + nz * z + d = 0
+  const traceFSeg = clip2DLine(nx, nz, d);
+  // Horizontal trace h_alpha (z = 0): nx * x + ny * y + d = 0
+  const traceHSeg = clip2DLine(nx, ny, d);
+
+  const x0 = Math.abs(nx) > 1e-6 ? -d / nx : null;
+  return { nx, ny, nz, d, traceFSeg, traceHSeg, x0, p1, p2, p3 };
+}
+
+// Helper to get line segment inside [-15, 15] x [-15, 15] for A*x + B*w + C = 0
+function clip2DLine(A, B, C) {
+  const pts = [];
+  const L = 15;
+  if (Math.abs(B) > 1e-6) {
+    [-L, L].forEach(x => {
+      const w = (-C - A * x) / B;
+      if (w >= -L && w <= L) pts.push({ x, w });
+    });
+  }
+  if (Math.abs(A) > 1e-6) {
+    [-L, L].forEach(w => {
+      const x = (-C - B * w) / A;
+      if (x > -L && x < L) pts.push({ x, w });
+    });
+  }
+  if (pts.length < 2) return null;
+  return [pts[0], pts[1]];
+}
+
+// Compute Intersections (Line ∩ Plane or Line ∩ Line)
+function computeIntersectionGeometry(intEnt) {
+  if (intEnt.mode === 'line-plane') {
+    const lineEnt = getEntity(intEnt.lineId);
+    const planeEnt = getEntity(intEnt.planeId);
+    if (!lineEnt || !planeEnt) return null;
+    const lg = computeLineGeometry(lineEnt);
+    const pg = computePlaneGeometry(planeEnt);
+    if (!lg || !pg) return null;
+    const denom = pg.nx * lg.dx + pg.ny * lg.dy + pg.nz * lg.dz;
+    if (Math.abs(denom) < 1e-6) return null;
+    const t = -(pg.nx * lg.pA.x + pg.ny * lg.pA.y + pg.nz * lg.pA.z + pg.d) / denom;
+    return {
+      point: {
+        x: lg.pA.x + t * lg.dx,
+        y: lg.pA.y + t * lg.dy,
+        z: lg.pA.z + t * lg.dz
+      }
+    };
+  } else if (intEnt.mode === 'line-line') {
+    const l1 = getEntity(intEnt.line1Id);
+    const l2 = getEntity(intEnt.line2Id);
+    if (!l1 || !l2) return null;
+    const g1 = computeLineGeometry(l1);
+    const g2 = computeLineGeometry(l2);
+    if (!g1 || !g2) return null;
+    // Solve in XY projection (x, y)
+    const det = g1.dx * (-g2.dy) - g1.dy * (-g2.dx);
+    if (Math.abs(det) < 1e-6) return null;
+    const rhsX = g2.pA.x - g1.pA.x;
+    const rhsY = g2.pA.y - g1.pA.y;
+    const t = (rhsX * (-g2.dy) - rhsY * (-g2.dx)) / det;
+    return {
+      point: {
+        x: g1.pA.x + t * g1.dx,
+        y: g1.pA.y + t * g1.dy,
+        z: g1.pA.z + t * g1.dz
+      }
+    };
+  }
+  return null;
+}
+
+/* ============================================================================
+   2. PRESETS (INCLUDING PEDRO'S EXACT DEFAULT PROBLEM)
+   ============================================================================ */
+function loadPreset(name) {
+  state.selectedId = null;
+  if (name === 'default') {
+    state.entities = [
+      {
+        id: 'ptA', type: 'point', label: 'A', x: 3, y: 5, z: 4,
+        inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false
+      },
+      {
+        id: 'ptB', type: 'point', label: 'B', x: -1, y: 2, z: -5,
+        inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false
+      },
+      {
+        id: 'lnA', type: 'line', label: 'a', p1Id: 'ptA', p2Id: 'ptB',
+        inStatement: false, isGoal: true, showTraceF: true, askTraceF: true, showTraceH: true, askTraceH: false
+      }
+    ];
+  } else if (name === 'intersecao') {
+    state.entities = [
+      { id: 'ptA', type: 'point', label: 'A', x: 5, y: 2, z: 6, inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false },
+      { id: 'ptB', type: 'point', label: 'B', x: -3, y: 7, z: 1, inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false },
+      { id: 'lnR', type: 'line', label: 'r', p1Id: 'ptA', p2Id: 'ptB', inStatement: true, isGoal: false, showTraceF: false, askTraceF: false, showTraceH: false, askTraceH: false },
+      { id: 'plAlpha', type: 'plane', label: 'α', mode: 'traces', x0: 8, angF: 40, angH: 45, inStatement: true, isGoal: false },
+      { id: 'intI', type: 'intersection', label: 'I', mode: 'line-plane', lineId: 'lnR', planeId: 'plAlpha', inStatement: false, isGoal: true }
+    ];
+  } else if (name === 'concorrentes') {
+    state.entities = [
+      { id: 'ptA', type: 'point', label: 'A', x: 6, y: 3, z: 5, inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false },
+      { id: 'ptB', type: 'point', label: 'B', x: -2, y: 7, z: 1, inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false },
+      { id: 'ptC', type: 'point', label: 'C', x: 2, y: 5, z: 3, inStatement: false, omitX: false, omitY: false, omitZ: false, isGoal: true },
+      { id: 'lnR', type: 'line', label: 'r', p1Id: 'ptA', p2Id: 'ptB', inStatement: false, isGoal: true, showTraceF: true, askTraceF: true, showTraceH: true, askTraceH: true }
+    ];
+  }
+  renderAll();
+}
+
+/* ============================================================================
+   3. 2D DIHEDRAL SVG RENDERER (ÉPURA & 1:1 PRINT LAYERS)
+   ============================================================================ */
+function render2DEpura(targetSvg, forStudentSheet = false, forPrintMm = false) {
+  const gridG = targetSvg.querySelector('#svgGridLayer');
+  const axisG = targetSvg.querySelector('#svgAxisLayer');
+  const constG = targetSvg.querySelector('#svgConstructionLayer');
+  const projG = targetSvg.querySelector('#svgProjectionsLayer');
+  const solG = targetSvg.querySelector('#svgSolutionLayer');
+  const interG = targetSvg.querySelector('#svgInteractiveLayer');
+  const labelG = targetSvg.querySelector('#svgLabelsLayer');
+
+  [gridG, axisG, constG, projG, solG, interG, labelG].forEach(g => { if (g) g.innerHTML = ''; });
+
+  // 1. GRID (-15cm to +15cm)
+  if ((state.showGrid && !forPrintMm) && gridG) {
+    for (let cm = -MAX_CM; cm <= MAX_CM; cm += 1) {
+      const pos = cm * MM_PER_CM;
+      const isMajor = cm % 5 === 0;
+      const stroke = isMajor ? '#e2e8f0' : '#f1f5f9';
+      const sw = isMajor ? '0.35' : '0.2';
+      gridG.innerHTML += `<line x1="${pos}" y1="-150" x2="${pos}" y2="150" stroke="${stroke}" stroke-width="${sw}" />`;
+      gridG.innerHTML += `<line x1="-150" y1="${pos}" x2="150" y2="${pos}" stroke="${stroke}" stroke-width="${sw}" />`;
+    }
+    // Outer sheet border (-15 to +15 cm)
+    gridG.innerHTML += `<rect x="-150" y="-150" width="300" height="300" fill="none" stroke="#cbd5e1" stroke-width="0.4" />`;
+  }
+
+  // 2. AXIS X (Linha de Terra) & ORIGIN O
+  axisG.innerHTML += `
+    <line x1="-150" y1="0" x2="150" y2="0" stroke="#000000" stroke-width="0.45" />
+    <line x1="0" y1="-1.8" x2="0" y2="1.8" stroke="#000000" stroke-width="0.4" />
+    <text x="-147" y="-2.5" font-size="4.2" font-weight="600" fill="#000000">x</text>
+    <text x="1.2" y="-2.2" font-size="3.8" font-weight="600" fill="#000000">O</text>
+  `;
+
+  // Helper to append text label
+  function addLabel(x, y, mainTxt, subTxt = '', color = '#000000', isBold = false) {
+    const weight = isBold ? '700' : '500';
+    const subMarkup = subTxt ? `<tspan dy="1.2" font-size="2.7">${subTxt}</tspan>` : '';
+    labelG.innerHTML += `<text x="${x + 2}" y="${y - 1.5}" font-size="3.8" font-weight="${weight}" fill="${color}">${mainTxt}${subMarkup}</text>`;
+  }
+
+  // 3. RENDER PLANES
+  state.entities.filter(e => e.type === 'plane').forEach(pl => {
+    if (forStudentSheet && pl.isGoal) return;
+    const pg = computePlaneGeometry(pl);
+    if (!pg) return;
+    const isSel = state.selectedId === pl.id && !forPrintMm;
+    const color = isSel ? '#ea580c' : '#000000';
+    const sw = pl.isGoal ? '0.6' : '0.4';
+
+    // Frontal trace f_alpha (y=0 -> z is vertical up)
+    if (pg.traceFSeg) {
+      const p1 = toSvgA2(pg.traceFSeg[0].x, pg.traceFSeg[0].w);
+      const p2 = toSvgA2(pg.traceFSeg[1].x, pg.traceFSeg[1].w);
+      const layer = pl.isGoal ? solG : projG;
+      layer.innerHTML += `<line x1="${p1.sx}" y1="${p1.sy}" x2="${p2.sx}" y2="${p2.sy}" stroke="${color}" stroke-width="${sw}" onclick="selectEntity('${pl.id}')" />`;
+      addLabel(p2.sx - 6, p2.sy + 4, 'f', pl.label, color, pl.isGoal);
+    }
+    // Horizontal trace h_alpha (z=0 -> y is vertical down)
+    if (pg.traceHSeg) {
+      const p1 = toSvgA1(pg.traceHSeg[0].x, pg.traceHSeg[0].w);
+      const p2 = toSvgA1(pg.traceHSeg[1].x, pg.traceHSeg[1].w);
+      const layer = pl.isGoal ? solG : projG;
+      layer.innerHTML += `<line x1="${p1.sx}" y1="${p1.sy}" x2="${p2.sx}" y2="${p2.sy}" stroke="${color}" stroke-width="${sw}" onclick="selectEntity('${pl.id}')" />`;
+      addLabel(p2.sx - 6, p2.sy - 2, 'h', pl.label, color, pl.isGoal);
+    }
+  });
+
+  // 4. RENDER LINES & LINE TRACES (F and H)
+  state.entities.filter(e => e.type === 'line').forEach(ln => {
+    if (forStudentSheet && ln.isGoal) return;
+    const lg = computeLineGeometry(ln);
+    if (!lg) return;
+    const isSel = state.selectedId === ln.id && !forPrintMm;
+    const strokeColor = isSel ? '#ea580c' : '#000000';
+    const sw = ln.isGoal ? '0.6' : '0.35';
+    const targetLayer = ln.isGoal ? solG : projG;
+
+    // r1 (Horizontal projection)
+    const s1 = toSvgA1(lg.pStart.x, lg.pStart.y);
+    const e1 = toSvgA1(lg.pEnd.x, lg.pEnd.y);
+    targetLayer.innerHTML += `<line x1="${s1.sx}" y1="${s1.sy}" x2="${e1.sx}" y2="${e1.sy}" stroke="${strokeColor}" stroke-width="${sw}" onclick="selectEntity('${ln.id}')" />`;
+
+    // r2 (Frontal projection)
+    const s2 = toSvgA2(lg.pStart.x, lg.pStart.z);
+    const e2 = toSvgA2(lg.pEnd.x, lg.pEnd.z);
+    targetLayer.innerHTML += `<line x1="${s2.sx}" y1="${s2.sy}" x2="${e2.sx}" y2="${e2.sy}" stroke="${strokeColor}" stroke-width="${sw}" onclick="selectEntity('${ln.id}')" />`;
+
+    // Labels r1, r2 near point B
+    const b1 = toSvgA1(lg.pB.x, lg.pB.y);
+    const b2 = toSvgA2(lg.pB.x, lg.pB.z);
+    addLabel(b1.sx + 4, b1.sy + 4, ln.label, '1', strokeColor, ln.isGoal);
+    addLabel(b2.sx + 4, b2.sy - 3, ln.label, '2', strokeColor, ln.isGoal);
+
+    // Frontal Trace F (F1 on x-axis, F2 at z)
+    if (ln.showTraceF && lg.traceF && (!forStudentSheet || !ln.askTraceF)) {
+      const f1 = toSvgA1(lg.traceF.x, 0);
+      const f2 = toSvgA2(lg.traceF.x, lg.traceF.z);
+      constG.innerHTML += `<line x1="${f1.sx}" y1="${f1.sy}" x2="${f2.sx}" y2="${f2.sy}" stroke="#000000" stroke-width="0.18" stroke-dasharray="1.5,1.5" />`;
+      solG.innerHTML += `<circle cx="${f1.sx}" cy="${f1.sy}" r="1.1" fill="#000000" />`;
+      solG.innerHTML += `<circle cx="${f2.sx}" cy="${f2.sy}" r="1.4" fill="#000000" />`;
+      addLabel(f1.sx - 5, f1.sy + 4.5, 'F', '1', '#000000', true);
+      addLabel(f2.sx + 1.5, f2.sy - 1.5, 'F', '2', '#000000', true);
+    }
+
+    // Horizontal Trace H (H2 on x-axis, H1 at y)
+    if (ln.showTraceH && lg.traceH && (!forStudentSheet || !ln.askTraceH)) {
+      const h1 = toSvgA1(lg.traceH.x, lg.traceH.y);
+      const h2 = toSvgA2(lg.traceH.x, 0);
+      constG.innerHTML += `<line x1="${h1.sx}" y1="${h1.sy}" x2="${h2.sx}" y2="${h2.sy}" stroke="#000000" stroke-width="0.18" stroke-dasharray="1.5,1.5" />`;
+      solG.innerHTML += `<circle cx="${h2.sx}" cy="${h2.sy}" r="1.1" fill="#000000" />`;
+      solG.innerHTML += `<circle cx="${h1.sx}" cy="${h1.sy}" r="1.4" fill="#000000" />`;
+      addLabel(h2.sx - 5, h2.sy - 2, 'H', '2', '#000000', true);
+      addLabel(h1.sx + 1.5, h1.sy + 3.5, 'H', '1', '#000000', true);
+    }
+  });
+
+  // 5. RENDER INTERSECTIONS
+  state.entities.filter(e => e.type === 'intersection').forEach(intEnt => {
+    if (forStudentSheet && intEnt.isGoal) return;
+    const ig = computeIntersectionGeometry(intEnt);
+    if (!ig || !ig.point) return;
+    const p1 = toSvgA1(ig.point.x, ig.point.y);
+    const p2 = toSvgA2(ig.point.x, ig.point.z);
+    const isSel = state.selectedId === intEnt.id && !forPrintMm;
+    const col = isSel ? '#ea580c' : '#000000';
+
+    constG.innerHTML += `<line x1="${p1.sx}" y1="${p1.sy}" x2="${p2.sx}" y2="${p2.sy}" stroke="${col}" stroke-width="0.2" stroke-dasharray="1.5,1.5" />`;
+    solG.innerHTML += `<circle cx="${p1.sx}" cy="${p1.sy}" r="1.6" fill="${col}" />`;
+    solG.innerHTML += `<circle cx="${p2.sx}" cy="${p2.sy}" r="1.6" fill="${col}" />`;
+    addLabel(p1.sx + 1.5, p1.sy + 3.5, intEnt.label, '1', col, true);
+    addLabel(p2.sx + 1.5, p2.sy - 1.5, intEnt.label, '2', col, true);
+  });
+
+  // 6. RENDER POINTS (A1, A2 & LINHA DE CHAMADA)
+  state.entities.filter(e => e.type === 'point').forEach(pt => {
+    if (forStudentSheet && pt.isGoal) return;
+    const a1 = toSvgA1(pt.x, pt.y);
+    const a2 = toSvgA2(pt.x, pt.z);
+    const isSel = state.selectedId === pt.id && !forPrintMm;
+    const color = isSel ? '#ea580c' : '#000000';
+    const rSize = isSel ? '1.8' : '1.35';
+
+    // Linha de chamada (Projector line connecting A1, A2, and axis x)
+    const minY = Math.min(0, a1.sy, a2.sy);
+    const maxY = Math.max(0, a1.sy, a2.sy);
+    if (!forStudentSheet || (!pt.omitY && !pt.omitZ)) {
+      constG.innerHTML += `<line x1="${a1.sx}" y1="${minY}" x2="${a1.sx}" y2="${maxY}" stroke="${isSel ? '#ea580c' : '#000000'}" stroke-width="0.18" />`;
+    }
+
+    // Horizontal Projection A1
+    if (!forStudentSheet || !pt.omitY) {
+      projG.innerHTML += `<circle cx="${a1.sx}" cy="${a1.sy}" r="${rSize}" fill="${color}" />`;
+      addLabel(a1.sx, a1.sy, pt.label, '1', color, isSel);
+      if (!forPrintMm && interG) {
+        interG.innerHTML += `<circle class="handle-point" data-id="${pt.id}" data-proj="A1" cx="${a1.sx}" cy="${a1.sy}" r="3.2" fill="transparent" />`;
+      }
+    }
+
+    // Frontal Projection A2
+    if (!forStudentSheet || !pt.omitZ) {
+      projG.innerHTML += `<circle cx="${a2.sx}" cy="${a2.sy}" r="${rSize}" fill="${color}" />`;
+      addLabel(a2.sx, a2.sy, pt.label, '2', color, isSel);
+      if (!forPrintMm && interG) {
+        interG.innerHTML += `<circle class="handle-point" data-id="${pt.id}" data-proj="A2" cx="${a2.sx}" cy="${a2.sy}" r="3.2" fill="transparent" />`;
+      }
+    }
+  });
+
+  // 7. RENDER PENDING 2-CLICK INSERTION PREVIEW
+  if (state.pendingPointStep1 && !forPrintMm && interG) {
+    const p1 = toSvgA1(state.pendingPointStep1.x, state.pendingPointStep1.y);
+    interG.innerHTML += `
+      <line x1="${p1.sx}" y1="-150" x2="${p1.sx}" y2="150" stroke="#f97316" stroke-width="0.3" stroke-dasharray="2,2" />
+      <circle cx="${p1.sx}" cy="${p1.sy}" r="1.8" fill="#f97316" />
+      <text x="${p1.sx + 2.5}" y="${p1.sy - 1.5}" font-size="3.6" fill="#ea580c" font-weight="700">Novo₁ (x=${fmt(state.pendingPointStep1.x)}; y=${fmt(state.pendingPointStep1.y)})</text>
+    `;
+  }
+}
+
+/* ============================================================================
+   4. INTERACTIVE MOUSE EVENTS ON 2D ÉPURA (DRAG & 2-CLICK INSERTION)
+   ============================================================================ */
+const epuraSvg = document.getElementById('epuraSvg');
+let dragState = null; // { id, proj: 'A1' | 'A2' }
+
+function getMouseCmCoords(evt) {
+  const pt = epuraSvg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  const svgP = pt.matrixTransform(epuraSvg.getScreenCTM().inverse());
+  // Convert SVG (sx, sy) back to Portuguese GDA (x, yDown, zUp)
+  let x = -svgP.x / MM_PER_CM;
+  let yDown = svgP.y / MM_PER_CM;
+  let zUp = -svgP.y / MM_PER_CM;
+
+  if (state.snap05) {
+    x = roundStep(x, 0.5);
+    yDown = roundStep(yDown, 0.5);
+    zUp = roundStep(zUp, 0.5);
+  } else {
+    x = Math.round(x * 10) / 10;
+    yDown = Math.round(yDown * 10) / 10;
+    zUp = Math.round(zUp * 10) / 10;
+  }
+  x = Math.max(-MAX_CM, Math.min(MAX_CM, x));
+  yDown = Math.max(-MAX_CM, Math.min(MAX_CM, yDown));
+  zUp = Math.max(-MAX_CM, Math.min(MAX_CM, zUp));
+  return { x, yDown, zUp };
+}
+
+epuraSvg.addEventListener('pointerdown', (evt) => {
+  const coords = getMouseCmCoords(evt);
+
+  // Mode 1: 2-Click Point Insertion
+  if (state.mouseTool === 'point') {
+    if (!state.pendingPointStep1) {
+      state.pendingPointStep1 = { x: coords.x, y: coords.yDown };
+      const badge = document.getElementById('insertStatusBadge');
+      badge.textContent = `2.º Clique na linha de chamada (x = ${fmt(coords.x)}): Marcar A₂ (cota z)`;
+      renderAll();
+    } else {
+      const nextLetter = getNextPointLetter();
+      const newPt = {
+        id: 'pt_' + Date.now(),
+        type: 'point',
+        label: nextLetter,
+        x: state.pendingPointStep1.x,
+        y: state.pendingPointStep1.y,
+        z: coords.zUp,
+        inStatement: true,
+        omitX: false, omitY: false, omitZ: false,
+        isGoal: false
+      };
+      state.entities.push(newPt);
+      state.selectedId = newPt.id;
+      state.pendingPointStep1 = null;
+      setMouseTool('select');
+      renderAll();
+    }
+    return;
+  }
+
+  // Mode 2: Select & Drag existing handle
+  const handle = evt.target.closest('.handle-point');
+  if (handle) {
+    const id = handle.getAttribute('data-id');
+    const proj = handle.getAttribute('data-proj');
+    state.selectedId = id;
+    dragState = { id, proj };
+    epuraSvg.setPointerCapture(evt.pointerId);
+    renderAll();
+  }
+});
+
+epuraSvg.addEventListener('pointermove', (evt) => {
+  const coords = getMouseCmCoords(evt);
+  document.getElementById('cursorCoords').textContent =
+    `x: ${fmt(coords.x)} | y: ${fmt(coords.yDown)} | z: ${fmt(coords.zUp)} cm`;
+
+  if (dragState) {
+    const pt = getEntity(dragState.id);
+    if (pt) {
+      pt.x = coords.x;
+      if (dragState.proj === 'A1') pt.y = coords.yDown;
+      if (dragState.proj === 'A2') pt.z = coords.zUp;
+      renderAll();
+    }
+  }
+});
+
+epuraSvg.addEventListener('pointerup', () => {
+  dragState = null;
+});
+
+function setMouseTool(tool) {
+  state.mouseTool = tool;
+  state.pendingPointStep1 = null;
+  const btnSel = document.getElementById('toolSelect');
+  const btnPt = document.getElementById('toolInsertPoint');
+  const badge = document.getElementById('insertStatusBadge');
+
+  if (tool === 'point') {
+    btnPt.className = 'px-2.5 py-1 rounded font-medium bg-orange-600 text-white transition';
+    btnSel.className = 'px-2.5 py-1 rounded font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+    epuraSvg.classList.remove('mode-select');
+    badge.classList.remove('hidden');
+    badge.textContent = '1.º Clique: Marcar projeção horizontal A₁ (define x e afastamento y)';
+  } else {
+    btnSel.className = 'px-2.5 py-1 rounded font-medium bg-slate-900 text-white transition';
+    btnPt.className = 'px-2.5 py-1 rounded font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+    epuraSvg.classList.add('mode-select');
+    badge.classList.add('hidden');
+  }
+  renderAll();
+}
+
+function getNextPointLetter() {
+  const used = new Set(state.entities.filter(e => e.type === 'point').map(e => e.label));
+  for (let code = 65; code <= 90; code++) {
+    const ch = String.fromCharCode(code);
+    if (!used.has(ch)) return ch;
+  }
+  return 'P';
+}
+
+/* ============================================================================
+   5. 3D SPATIAL DIHEDRAL VIEW WITH PEDAGOGICAL REBATIMENTO SLIDER
+   ============================================================================ */
+const canvas3D = document.getElementById('canvas3D');
+const ctx3D = canvas3D.getContext('2d');
+let camYaw = -0.65;
+let camPitch = 0.45;
+let isOrbiting = false;
+let lastMouse3D = { x: 0, y: 0 };
+
+canvas3D.addEventListener('pointerdown', (e) => {
+  isOrbiting = true;
+  lastMouse3D = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('pointermove', (e) => {
+  if (!isOrbiting) return;
+  const dx = e.clientX - lastMouse3D.x;
+  const dy = e.clientY - lastMouse3D.y;
+  camYaw += dx * 0.008;
+  camPitch = Math.max(-1.2, Math.min(1.2, camPitch + dy * 0.008));
+  lastMouse3D = { x: e.clientX, y: e.clientY };
+  render3DView();
+});
+window.addEventListener('pointerup', () => { isOrbiting = false; });
+
+function updateRebatimento(val) {
+  state.rebatimentoDeg = Number(val);
+  document.getElementById('rebAngleLabel').textContent =
+    state.rebatimentoDeg === 90 ? '90° (Épura Rebatida)' : `${state.rebatimentoDeg}°`;
+  render3DView();
+}
+
+function toggleRebatimentoAnim() {
+  const target = state.rebatimentoDeg > 45 ? 0 : 90;
+  document.getElementById('rebSlider').value = target;
+  updateRebatimento(target);
+}
+
+// Project 3D GDA coordinates (x: left, y: front, z: up) onto 2D Canvas
+function project3D(x, y, z, w, h, scale) {
+  // In 3D viewer space: X_world = -x (so +x goes left), Y_world = z (up), Z_world = y (front towards viewer)
+  const wx = -x;
+  const wy = z;
+  const wz = y;
+
+  // Rotate Yaw around Y_world
+  const cosY = Math.cos(camYaw), sinY = Math.sin(camYaw);
+  const rx = wx * cosY + wz * sinY;
+  const rz = -wx * sinY + wz * cosY;
+
+  // Rotate Pitch around X_world
+  const cosP = Math.cos(camPitch), sinP = Math.sin(camPitch);
+  const ry = wy * cosP - rz * sinP;
+
+  return {
+    px: w / 2 + rx * scale,
+    py: h / 2 - ry * scale
+  };
+}
+
+// Rotate horizontal plane point (x, y, 0) around x-axis by rebatimento angle theta
+function rotateRebatimento(x, y) {
+  const rad = (state.rebatimentoDeg * Math.PI) / 180;
+  return {
+    x: x,
+    y: y * Math.cos(rad),
+    z: -y * Math.sin(rad) // +y (anterior) rotates DOWN (-z)
+  };
+}
+
+function render3DView() {
+  const rect = canvas3D.parentElement.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+  canvas3D.width = rect.width * window.devicePixelRatio;
+  canvas3D.height = rect.height * window.devicePixelRatio;
+  ctx3D.save();
+  ctx3D.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const w = rect.width;
+  const h = rect.height;
+  const scale = Math.min(w, h) / 38;
+
+  ctx3D.fillStyle = '#0f172a';
+  ctx3D.fillRect(0, 0, w, h);
+
+  function drawPoly3D(pts, fill, stroke) {
+    ctx3D.beginPath();
+    pts.forEach((p, idx) => {
+      const s = project3D(p.x, p.y, p.z, w, h, scale);
+      if (idx === 0) ctx3D.moveTo(s.px, s.py);
+      else ctx3D.lineTo(s.px, s.py);
+    });
+    ctx3D.closePath();
+    if (fill) { ctx3D.fillStyle = fill; ctx3D.fill(); }
+    if (stroke) { ctx3D.strokeStyle = stroke; ctx3D.lineWidth = 1; ctx3D.stroke(); }
+  }
+
+  function drawLine3D(p1, p2, color, width = 1.5, dash = []) {
+    const s1 = project3D(p1.x, p1.y, p1.z, w, h, scale);
+    const s2 = project3D(p2.x, p2.y, p2.z, w, h, scale);
+    ctx3D.beginPath();
+    ctx3D.setLineDash(dash);
+    ctx3D.strokeStyle = color;
+    ctx3D.lineWidth = width;
+    ctx3D.moveTo(s1.px, s1.py);
+    ctx3D.lineTo(s2.px, s2.py);
+    ctx3D.stroke();
+    ctx3D.setLineDash([]);
+  }
+
+  // 1. Frontal Projection Plane phi_0 (y = 0, fixed)
+  drawPoly3D(
+    [{ x: -12, y: 0, z: -12 }, { x: 12, y: 0, z: -12 }, { x: 12, y: 0, z: 12 }, { x: -12, y: 0, z: 12 }],
+    'rgba(56, 189, 248, 0.08)', 'rgba(56, 189, 248, 0.35)'
+  );
+
+  // 2. Horizontal Projection Plane nu_0 (rotates with rebatimento slider)
+  const hCorners = [
+    rotateRebatimento(-12, -12),
+    rotateRebatimento(12, -12),
+    rotateRebatimento(12, 12),
+    rotateRebatimento(-12, 12)
+  ];
+  drawPoly3D(hCorners, 'rgba(251, 146, 60, 0.08)', 'rgba(251, 146, 60, 0.4)');
+
+  // 3. Axis X (Linha de Terra)
+  drawLine3D({ x: -14, y: 0, z: 0 }, { x: 14, y: 0, z: 0 }, '#f8fafc', 2.2);
+  const posXLabel = project3D(14.5, 0, 0, w, h, scale);
+  ctx3D.fillStyle = '#f8fafc';
+  ctx3D.font = 'bold 12px Inter';
+  ctx3D.fillText('+x', posXLabel.px, posXLabel.py);
+
+  // 4. Render 3D Lines
+  state.entities.filter(e => e.type === 'line').forEach(ln => {
+    const lg = computeLineGeometry(ln);
+    if (!lg) return;
+    // Spatial line r in 3D (when not fully rebated)
+    if (state.rebatimentoDeg < 90) {
+      drawLine3D(lg.pStart, lg.pEnd, '#38bdf8', 2);
+    }
+    // Frontal projection r2 on phi_0
+    drawLine3D({ x: lg.pStart.x, y: 0, z: lg.pStart.z }, { x: lg.pEnd.x, y: 0, z: lg.pEnd.z }, '#94a3b8', 1.4);
+    // Horizontal projection r1 on rotating nu_0
+    drawLine3D(rotateRebatimento(lg.pStart.x, lg.pStart.y), rotateRebatimento(lg.pEnd.x, lg.pEnd.y), '#fb923c', 1.4);
+  });
+
+  // 5. Render 3D Points and Projectors
+  state.entities.filter(e => e.type === 'point').forEach(pt => {
+    const pSpace = { x: pt.x, y: pt.y, z: pt.z };
+    const pA2 = { x: pt.x, y: 0, z: pt.z };
+    const pA1 = rotateRebatimento(pt.x, pt.y);
+    const pX0 = { x: pt.x, y: 0, z: 0 };
+
+    // Projectors
+    if (state.rebatimentoDeg < 90) {
+      drawLine3D(pSpace, pA2, 'rgba(148,163,184,0.5)', 1, [3, 3]);
+      drawLine3D(pSpace, { x: pt.x, y: pt.y, z: 0 }, 'rgba(148,163,184,0.5)', 1, [3, 3]);
+    }
+    drawLine3D(pA2, pX0, 'rgba(226,232,240,0.65)', 1);
+    drawLine3D(pA1, pX0, 'rgba(251,146,60,0.75)', 1);
+
+    // Draw dots
+    const sA2 = project3D(pA2.x, pA2.y, pA2.z, w, h, scale);
+    const sA1 = project3D(pA1.x, pA1.y, pA1.z, w, h, scale);
+    ctx3D.fillStyle = '#e2e8f0';
+    ctx3D.beginPath(); ctx3D.arc(sA2.px, sA2.py, 3.5, 0, Math.PI * 2); ctx3D.fill();
+    ctx3D.fillText(`${pt.label}₂`, sA2.px + 5, sA2.py - 4);
+
+    ctx3D.fillStyle = '#fb923c';
+    ctx3D.beginPath(); ctx3D.arc(sA1.px, sA1.py, 3.5, 0, Math.PI * 2); ctx3D.fill();
+    ctx3D.fillText(`${pt.label}₁`, sA1.px + 5, sA1.py + 10);
+
+    if (state.rebatimentoDeg < 90) {
+      const sSp = project3D(pSpace.x, pSpace.y, pSpace.z, w, h, scale);
+      ctx3D.fillStyle = '#38bdf8';
+      ctx3D.beginPath(); ctx3D.arc(sSp.px, sSp.py, 4.5, 0, Math.PI * 2); ctx3D.fill();
+      ctx3D.fillText(pt.label, sSp.px + 6, sSp.py - 6);
+    }
+  });
+
+  ctx3D.restore();
+}
+
+/* ============================================================================
+   6. PATRÍCIA'S FORM BUILDER & BIDIRECTIONAL INSPECTOR
+   ============================================================================ */
+function addBlockFromDropdown() {
+  const type = document.getElementById('newBlockType').value;
+  const points = state.entities.filter(e => e.type === 'point');
+  const lines = state.entities.filter(e => e.type === 'line');
+  const planes = state.entities.filter(e => e.type === 'plane');
+
+  if (type === 'point') {
+    const label = getNextPointLetter();
+    const id = 'pt_' + Date.now();
+    state.entities.push({
+      id, type: 'point', label, x: 2, y: 4, z: 3,
+      inStatement: true, omitX: false, omitY: false, omitZ: false, isGoal: false
+    });
+    state.selectedId = id;
+  } else if (type === 'line') {
+    const p1Id = points[0]?.id || '';
+    const p2Id = points[1]?.id || p1Id;
+    const id = 'ln_' + Date.now();
+    state.entities.push({
+      id, type: 'line', label: 'r', p1Id, p2Id,
+      inStatement: false, isGoal: true, showTraceF: true, askTraceF: true, showTraceH: true, askTraceH: false
+    });
+    state.selectedId = id;
+  } else if (type === 'plane') {
+    const id = 'pl_' + Date.now();
+    state.entities.push({
+      id, type: 'plane', label: 'α', mode: 'traces', x0: 6, angF: 45, angH: 40,
+      p1Id: points[0]?.id || '', p2Id: points[1]?.id || '', p3Id: points[2]?.id || '',
+      inStatement: true, isGoal: false
+    });
+    state.selectedId = id;
+  } else if (type === 'intersection') {
+    const id = 'int_' + Date.now();
+    state.entities.push({
+      id, type: 'intersection', label: 'I', mode: 'line-plane',
+      lineId: lines[0]?.id || '', planeId: planes[0]?.id || '',
+      line1Id: lines[0]?.id || '', line2Id: lines[1]?.id || '',
+      inStatement: false, isGoal: true
+    });
+    state.selectedId = id;
+  }
+  renderAll();
+}
+
+function selectEntity(id) {
+  state.selectedId = id;
+  renderAll();
+}
+
+function deleteEntity(id) {
+  state.entities = state.entities.filter(e => e.id !== id);
+  if (state.selectedId === id) state.selectedId = null;
+  renderAll();
+}
+
+function updateEntityField(id, field, value, isNumeric = false) {
+  const ent = getEntity(id);
+  if (!ent) return;
+  ent[field] = isNumeric ? parseFloat(value) || 0 : value;
+  render2DEpura(epuraSvg, state.previewStudentSheet, false);
+  render3DView();
+  generatePortugueseStatement();
+}
+
+function renderSidebarBlocks() {
+  const container = document.getElementById('blocksContainer');
+  const points = state.entities.filter(e => e.type === 'point');
+  const lines = state.entities.filter(e => e.type === 'line');
+  const planes = state.entities.filter(e => e.type === 'plane');
+
+  container.innerHTML = state.entities.map(ent => {
+    const isSel = state.selectedId === ent.id;
+    const borderClass = isSel ? 'border-orange-500 ring-2 ring-orange-200 bg-white' : 'border-slate-200 bg-white';
+
+    if (ent.type === 'point') {
+      return `
+        <div onclick="selectEntity('${ent.id}')" class="rounded-lg border ${borderClass} p-2.5 shadow-sm transition cursor-pointer">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">PONTO</span>
+              <input type="text" value="${ent.label}" onclick="event.stopPropagation()" oninput="updateEntityField('${ent.id}','label',this.value)" class="w-9 text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5 text-center" />
+              <span class="text-[11px] text-slate-500 font-medium">${classifyPoint(ent)}</span>
+            </div>
+            <button onclick="event.stopPropagation(); deleteEntity('${ent.id}')" class="text-slate-400 hover:text-red-600 text-xs px-1">✕</button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 mb-2" onclick="event.stopPropagation()">
+            <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+              <div class="flex justify-between items-center text-[10px] text-slate-500 mb-0.5">
+                <span>Abcissa x</span>
+                <label class="flex items-center gap-0.5 cursor-pointer" title="Desmarcar para omitir coordenada x no enunciado">
+                  <input type="checkbox" ${!ent.omitX ? 'checked' : ''} onchange="updateEntityField('${ent.id}','omitX',!this.checked); renderSidebarBlocks()" />
+                  <span>Dar</span>
+                </label>
+              </div>
+              <input type="number" step="0.1" value="${ent.x}" oninput="updateEntityField('${ent.id}','x',this.value,true)" class="w-full mono text-xs font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5" />
+            </div>
+            <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+              <div class="flex justify-between items-center text-[10px] text-slate-500 mb-0.5">
+                <span>Afast. y (A₁)</span>
+                <label class="flex items-center gap-0.5 cursor-pointer">
+                  <input type="checkbox" ${!ent.omitY ? 'checked' : ''} onchange="updateEntityField('${ent.id}','omitY',!this.checked); renderSidebarBlocks()" />
+                  <span>Dar</span>
+                </label>
+              </div>
+              <input type="number" step="0.1" value="${ent.y}" oninput="updateEntityField('${ent.id}','y',this.value,true)" class="w-full mono text-xs font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5" />
+            </div>
+            <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+              <div class="flex justify-between items-center text-[10px] text-slate-500 mb-0.5">
+                <span>Cota z (A₂)</span>
+                <label class="flex items-center gap-0.5 cursor-pointer">
+                  <input type="checkbox" ${!ent.omitZ ? 'checked' : ''} onchange="updateEntityField('${ent.id}','omitZ',!this.checked); renderSidebarBlocks()" />
+                  <span>Dar</span>
+                </label>
+              </div>
+              <input type="number" step="0.1" value="${ent.z}" oninput="updateEntityField('${ent.id}','z',this.value,true)" class="w-full mono text-xs font-semibold bg-white border border-slate-300 rounded px-1.5 py-0.5" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100" onclick="event.stopPropagation()">
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-700">
+              <input type="checkbox" ${ent.inStatement ? 'checked' : ''} onchange="updateEntityField('${ent.id}','inStatement',this.checked)" />
+              <span>Faz parte dos dados do enunciado</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer font-semibold text-orange-700">
+              <input type="checkbox" ${ent.isGoal ? 'checked' : ''} onchange="updateEntityField('${ent.id}','isGoal',this.checked)" />
+              <span>🎯 Pedir Ponto</span>
+            </label>
+          </div>
+        </div>
+      `;
+    }
+
+    if (ent.type === 'line') {
+      const lg = computeLineGeometry(ent);
+      const ptOpts = points.map(p => `<option value="${p.id}" ${p.id === ent.p1Id ? 'selected' : ''}>Ponto ${p.label}</option>`).join('');
+      const ptOpts2 = points.map(p => `<option value="${p.id}" ${p.id === ent.p2Id ? 'selected' : ''}>Ponto ${p.label}</option>`).join('');
+      return `
+        <div onclick="selectEntity('${ent.id}')" class="rounded-lg border ${borderClass} p-2.5 shadow-sm transition cursor-pointer">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="bg-sky-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">RETA</span>
+              <input type="text" value="${ent.label}" onclick="event.stopPropagation()" oninput="updateEntityField('${ent.id}','label',this.value)" class="w-9 text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5 text-center" />
+              <span class="text-[11px] text-slate-500">União de 2 Pontos</span>
+            </div>
+            <button onclick="event.stopPropagation(); deleteEntity('${ent.id}')" class="text-slate-400 hover:text-red-600 text-xs px-1">✕</button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 mb-2 text-xs" onclick="event.stopPropagation()">
+            <select onchange="updateEntityField('${ent.id}','p1Id',this.value); renderSidebarBlocks()" class="border border-slate-300 rounded px-2 py-1 bg-slate-50">${ptOpts}</select>
+            <select onchange="updateEntityField('${ent.id}','p2Id',this.value); renderSidebarBlocks()" class="border border-slate-300 rounded px-2 py-1 bg-slate-50">${ptOpts2}</select>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3 text-[11px] bg-slate-50 p-1.5 rounded border border-slate-200 mb-1.5" onclick="event.stopPropagation()">
+            <label class="flex items-center gap-1 cursor-pointer font-semibold text-orange-700">
+              <input type="checkbox" ${ent.isGoal ? 'checked' : ''} onchange="updateEntityField('${ent.id}','isGoal',this.checked)" />
+              <span>🎯 Pedir Reta (${ent.label})</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer text-slate-700">
+              <input type="checkbox" ${ent.askTraceF ? 'checked' : ''} onchange="updateEntityField('${ent.id}','askTraceF',this.checked); updateEntityField('${ent.id}','showTraceF',true)" />
+              <span>🎯 Pedir Traço Frontal F</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer text-slate-700">
+              <input type="checkbox" ${ent.askTraceH ? 'checked' : ''} onchange="updateEntityField('${ent.id}','askTraceH',this.checked); updateEntityField('${ent.id}','showTraceH',true)" />
+              <span>🎯 Pedir Traço Horiz. H</span>
+            </label>
+          </div>
+
+          ${lg && lg.traceF ? `<div class="mono text-[10px] text-slate-500">F(${fmt(lg.traceF.x)}; 0; ${fmt(lg.traceF.z)}) | H(${lg.traceH ? fmt(lg.traceH.x) + '; ' + fmt(lg.traceH.y) + '; 0' : '—'})</div>` : ''}
+        </div>
+      `;
+    }
+
+    if (ent.type === 'plane') {
+      return `
+        <div onclick="selectEntity('${ent.id}')" class="rounded-lg border ${borderClass} p-2.5 shadow-sm transition cursor-pointer">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="bg-purple-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">PLANO</span>
+              <input type="text" value="${ent.label}" onclick="event.stopPropagation()" oninput="updateEntityField('${ent.id}','label',this.value)" class="w-9 text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5 text-center" />
+              <select onclick="event.stopPropagation()" onchange="updateEntityField('${ent.id}','mode',this.value); renderSidebarBlocks()" class="text-[11px] border border-slate-300 rounded px-1.5 py-0.5">
+                <option value="traces" ${ent.mode === 'traces' ? 'selected' : ''}>Por Traços (fα, hα)</option>
+                <option value="3points" ${ent.mode === '3points' ? 'selected' : ''}>Por 3 Pontos</option>
+              </select>
+            </div>
+            <button onclick="event.stopPropagation(); deleteEntity('${ent.id}')" class="text-slate-400 hover:text-red-600 text-xs px-1">✕</button>
+          </div>
+
+          ${ent.mode === 'traces' ? `
+            <div class="grid grid-cols-3 gap-2 mb-2 text-xs" onclick="event.stopPropagation()">
+              <div>
+                <span class="text-[10px] text-slate-500 block">Abcissa X₀ (cm)</span>
+                <input type="number" step="0.5" value="${ent.x0}" oninput="updateEntityField('${ent.id}','x0',this.value,true)" class="w-full mono border border-slate-300 rounded px-1.5 py-0.5" />
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-500 block">Ângulo fα (° AE)</span>
+                <input type="number" step="5" value="${ent.angF}" oninput="updateEntityField('${ent.id}','angF',this.value,true)" class="w-full mono border border-slate-300 rounded px-1.5 py-0.5" />
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-500 block">Ângulo hα (° AE)</span>
+                <input type="number" step="5" value="${ent.angH}" oninput="updateEntityField('${ent.id}','angH',this.value,true)" class="w-full mono border border-slate-300 rounded px-1.5 py-0.5" />
+              </div>
+            </div>
+          ` : `
+            <div class="grid grid-cols-3 gap-1.5 mb-2 text-xs" onclick="event.stopPropagation()">
+              <select onchange="updateEntityField('${ent.id}','p1Id',this.value)" class="border rounded px-1 py-1">${points.map(p => `<option value="${p.id}" ${p.id===ent.p1Id?'selected':''}>${p.label}</option>`).join('')}</select>
+              <select onchange="updateEntityField('${ent.id}','p2Id',this.value)" class="border rounded px-1 py-1">${points.map(p => `<option value="${p.id}" ${p.id===ent.p2Id?'selected':''}>${p.label}</option>`).join('')}</select>
+              <select onchange="updateEntityField('${ent.id}','p3Id',this.value)" class="border rounded px-1 py-1">${points.map(p => `<option value="${p.id}" ${p.id===ent.p3Id?'selected':''}>${p.label}</option>`).join('')}</select>
+            </div>
+          `}
+
+          <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100" onclick="event.stopPropagation()">
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-700">
+              <input type="checkbox" ${ent.inStatement ? 'checked' : ''} onchange="updateEntityField('${ent.id}','inStatement',this.checked)" />
+              <span>Dado no enunciado</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer font-semibold text-orange-700">
+              <input type="checkbox" ${ent.isGoal ? 'checked' : ''} onchange="updateEntityField('${ent.id}','isGoal',this.checked)" />
+              <span>🎯 Pedir Traços do Plano</span>
+            </label>
+          </div>
+        </div>
+      `;
+    }
+
+    if (ent.type === 'intersection') {
+      const ig = computeIntersectionGeometry(ent);
+      return `
+        <div onclick="selectEntity('${ent.id}')" class="rounded-lg border ${borderClass} p-2.5 shadow-sm transition cursor-pointer">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="bg-emerald-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">INTERSEÇÃO</span>
+              <input type="text" value="${ent.label}" onclick="event.stopPropagation()" oninput="updateEntityField('${ent.id}','label',this.value)" class="w-9 text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5 text-center" />
+              <span class="text-[11px] text-slate-500">Reta ∩ Plano</span>
+            </div>
+            <button onclick="event.stopPropagation(); deleteEntity('${ent.id}')" class="text-slate-400 hover:text-red-600 text-xs px-1">✕</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mb-2 text-xs" onclick="event.stopPropagation()">
+            <select onchange="updateEntityField('${ent.id}','lineId',this.value)" class="border border-slate-300 rounded px-2 py-1 bg-slate-50">
+              ${lines.map(l => `<option value="${l.id}" ${l.id===ent.lineId?'selected':''}>Reta ${l.label}</option>`).join('')}
+            </select>
+            <select onchange="updateEntityField('${ent.id}','planeId',this.value)" class="border border-slate-300 rounded px-2 py-1 bg-slate-50">
+              ${planes.map(p => `<option value="${p.id}" ${p.id===ent.planeId?'selected':''}>Plano ${p.label}</option>`).join('')}
+            </select>
+          </div>
+          ${ig && ig.point ? `<div class="mono text-[10px] text-emerald-700 font-semibold">${ent.label}(${fmt(ig.point.x)}; ${fmt(ig.point.y)}; ${fmt(ig.point.z)})</div>` : ''}
+        </div>
+      `;
+    }
+    return '';
+  }).join('');
+}
+
+/* ============================================================================
+   7. PEDAGOGICAL STATEMENT GENERATOR (GERADOR DE ENUNCIADOS)
+   ============================================================================ */
+function formatPointCoordsForStudent(pt) {
+  const cx = pt.omitX ? '?' : fmt(pt.x);
+  const cy = pt.omitY ? '?' : fmt(pt.y);
+  const cz = pt.omitZ ? '?' : fmt(pt.z);
+  return `${pt.label}(${cx}; ${cy}; ${cz})`;
+}
+
+function generatePortugueseStatement() {
+  const sentences = [];
+  const solutions = [];
+
+  // 1. Points and Lines
+  const givenPoints = state.entities.filter(e => e.type === 'point' && e.inStatement && !e.isGoal);
+  const lines = state.entities.filter(e => e.type === 'line');
+  const planes = state.entities.filter(e => e.type === 'plane');
+  const intersections = state.entities.filter(e => e.type === 'intersection');
+
+  lines.forEach(ln => {
+    const pA = getEntity(ln.p1Id);
+    const pB = getEntity(ln.p2Id);
+    const lg = computeLineGeometry(ln);
+    const goals = [];
+    if (ln.isGoal) goals.push(`as projeções da reta ${ln.label}`);
+    if (ln.askTraceF) goals.push(`o traço frontal F`);
+    if (ln.askTraceH) goals.push(`o traço horizontal H`);
+
+    if (goals.length > 0 && pA && pB) {
+      sentences.push(
+        `Determine ${goals.join(' e ')} da reta ${ln.label}, definida pelos pontos ${formatPointCoordsForStudent(pA)} e ${formatPointCoordsForStudent(pB)}.`
+      );
+    } else if (ln.inStatement && pA && pB) {
+      sentences.push(
+        `Considere a reta ${ln.label}, definida pelos pontos ${formatPointCoordsForStudent(pA)} e ${formatPointCoordsForStudent(pB)}.`
+      );
+    }
+
+    if (lg && lg.traceF) solutions.push(`F_${ln.label}(${fmt(lg.traceF.x)}; 0; ${fmt(lg.traceF.z)})`);
+    if (lg && lg.traceH) solutions.push(`H_${ln.label}(${fmt(lg.traceH.x)}; ${fmt(lg.traceH.y)}; 0)`);
+  });
+
+  planes.forEach(pl => {
+    if (pl.inStatement && pl.mode === 'traces') {
+      sentences.push(
+        `O plano oblíquo ${pl.label} interseta o eixo x no ponto de abcissa ${fmt(pl.x0)} cm; os seus traços frontal (f${pl.label}) e horizontal (h${pl.label}) fazem, respetivamente, ângulos de ${fmt(pl.angF)}° e ${fmt(pl.angH)}° (de abertura para a esquerda) com o eixo x.`
+      );
+    }
+    if (pl.isGoal && pl.mode === '3points') {
+      const p1 = getEntity(pl.p1Id), p2 = getEntity(pl.p2Id), p3 = getEntity(pl.p3Id);
+      if (p1 && p2 && p3) {
+        sentences.push(`Determine os traços frontal e horizontal do plano ${pl.label}, definido pelos pontos ${formatPointCoordsForStudent(p1)}, ${formatPointCoordsForStudent(p2)} e ${formatPointCoordsForStudent(p3)}.`);
+      }
+    }
+  });
+
+  intersections.forEach(intEnt => {
+    const ln = getEntity(intEnt.lineId);
+    const pl = getEntity(intEnt.planeId);
+    const ig = computeIntersectionGeometry(intEnt);
+    if (intEnt.isGoal && ln && pl) {
+      sentences.push(`Determine as projeções do ponto ${intEnt.label} de interseção da reta ${ln.label} com o plano ${pl.label}.`);
+    }
+    if (ig && ig.point) {
+      solutions.push(`${intEnt.label}(${fmt(ig.point.x)}; ${fmt(ig.point.y)}; ${fmt(ig.point.z)})`);
+    }
+  });
+
+  if (sentences.length === 0 && givenPoints.length > 0) {
+    sentences.push(`Represente pelas suas projeções os seguintes pontos: ${givenPoints.map(formatPointCoordsForStudent).join(', ')}.`);
+  }
+
+  document.getElementById('statementOutput').value = sentences.join('\n\n');
+  document.getElementById('teacherSolutionSummary').textContent =
+    solutions.length ? `Chave Professor: ${solutions.join('  |  ')}` : 'Chave Professor: Coordenadas exatas prontas para exportação 1:1';
+}
+
+function copyStatement() {
+  const txt = document.getElementById('statementOutput').value;
+  navigator.clipboard.writeText(txt);
+}
+
+/* ============================================================================
+   8. 1:1 REAL-SCALE SVG EXPORTER (300mm x 300mm — ALUNO + PROFESSOR)
+   ============================================================================ */
+function buildStandalonePrintSvg(isStudentMode) {
+  const tempSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  tempSvg.innerHTML = `
+    <g id="svgGridLayer"></g>
+    <g id="svgAxisLayer"></g>
+    <g id="svgConstructionLayer"></g>
+    <g id="svgProjectionsLayer"></g>
+    <g id="svgSolutionLayer"></g>
+    <g id="svgLabelsLayer"></g>
+  `;
+  render2DEpura(tempSvg, isStudentMode, true);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="300mm" height="300mm" viewBox="-150 -150 300 300" style="font-family: Inter, Arial, sans-serif; background: #ffffff;">
+  <title>GDA 10.º Ano - ${isStudentMode ? 'Folha do Estudante' : 'Resolução do Professor'} (Escala Real 1:1)</title>
+  <rect x="-150" y="-150" width="300" height="300" fill="#ffffff" stroke="#cccccc" stroke-width="0.2" />
+  ${tempSvg.innerHTML}
+</svg>`;
+}
+
+function downloadFile(filename, content, mime = 'image/svg+xml;charset=utf-8') {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportDualPack() {
+  const svgStudent = buildStandalonePrintSvg(true);
+  const svgTeacher = buildStandalonePrintSvg(false);
+  const statementTxt =
+    `=== ENUNCIADO DO ESTUDANTE (GDA 10.º ANO) ===\n` +
+    document.getElementById('statementOutput').value +
+    `\n\n=== CRITÉRIOS / CHAVE DE COORDENADAS (PROFESSOR) ===\n` +
+    document.getElementById('teacherSolutionSummary').textContent + `\n`;
+
+  downloadFile('gda10_folha_estudante_1para1.svg', svgStudent);
+  setTimeout(() => downloadFile('gda10_resolucao_professor_1para1.svg', svgTeacher), 200);
+  setTimeout(() => downloadFile('gda10_enunciado.txt', statementTxt, 'text/plain;charset=utf-8'), 400);
+}
+
+/* ============================================================================
+   9. WORKSPACE LAYOUT SWITCHER (SPLIT / FULL SCREEN / COLLAPSE SIDEBAR)
+   ============================================================================ */
+function setLayoutMode(mode) {
+  state.layoutMode = mode;
+  const wrapper = document.getElementById('viewportsWrapper');
+  const pEpura = document.getElementById('panelEpura');
+  const p3D = document.getElementById('panel3D');
+
+  const btnSplit = document.getElementById('btnViewSplit');
+  const btnEpura = document.getElementById('btnViewEpura');
+  const btn3D = document.getElementById('btnView3D');
+
+  [btnSplit, btnEpura, btn3D].forEach(b => {
+    b.className = 'px-2.5 py-1 rounded text-xs font-medium text-slate-300 hover:text-white transition';
+  });
+
+  if (mode === 'split') {
+    wrapper.className = 'flex-1 grid grid-cols-2 gap-0 overflow-hidden bg-slate-200';
+    pEpura.classList.remove('hidden');
+    p3D.classList.remove('hidden');
+    btnSplit.className = 'px-2.5 py-1 rounded text-xs font-medium bg-orange-600 text-white transition';
+  } else if (mode === 'epura') {
+    wrapper.className = 'flex-1 grid grid-cols-1 gap-0 overflow-hidden bg-slate-200';
+    pEpura.classList.remove('hidden');
+    p3D.classList.add('hidden');
+    btnEpura.className = 'px-2.5 py-1 rounded text-xs font-medium bg-orange-600 text-white transition';
+  } else if (mode === '3d') {
+    wrapper.className = 'flex-1 grid grid-cols-1 gap-0 overflow-hidden bg-slate-200';
+    pEpura.classList.add('hidden');
+    p3D.classList.remove('hidden');
+    btn3D.className = 'px-2.5 py-1 rounded text-xs font-medium bg-orange-600 text-white transition';
+  }
+  renderAll();
+}
+
+function toggleSidebar() {
+  state.sidebarOpen = !state.sidebarOpen;
+  const sb = document.getElementById('rightSidebar');
+  const btn = document.getElementById('btnToggleSidebar');
+  if (state.sidebarOpen) {
+    sb.classList.remove('hidden');
+    btn.textContent = '⇥ Colapsar Painel';
+  } else {
+    sb.classList.add('hidden');
+    btn.textContent = '⇤ Mostrar Painel';
+  }
+  renderAll();
+}
+
+function renderAll() {
+  render2DEpura(epuraSvg, state.previewStudentSheet, false);
+  render3DView();
+  renderSidebarBlocks();
+  generatePortugueseStatement();
+}
+
+window.addEventListener('resize', () => render3DView());
+loadPreset('default');
+</script>
+</body>
+</html>

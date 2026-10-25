@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDA-10 Dihedral Studio — Geometria Descritiva A (10.º Ano)</title>
+
+  <!-- Typography: Excon (Brand & UI) and Martian Mono (Technical Data & Values) -->
+  <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=excon@300,400,500,700,900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- JSZip for 1-Click ZIP Pack Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- Design System & Minimal Flat Stylesheet -->
+  <link rel="stylesheet" href="src/css/style.css" />
+</head>
+<body>
+
+  <div class="app-container">
+
+    <!-- ======================================================================
+         TOP HEADER BAR
+         ====================================================================== -->
+    <header class="header-bar">
+      <!-- Brand & Project Leads -->
+      <div class="brand-section">
+        <div class="brand-badge">
+          <span>GDA-10</span>
+          <span class="red-dot"></span>
+        </div>
+        <div class="brand-titles">
+          <h1>Dihedral Studio</h1>
+          <p>Geometria Descritiva A • 10.º Ano • Patrícia Rocha &amp; Pedro Amado (FBAUP)</p>
+        </div>
+      </div>
+
+      <!-- Viewport Switcher Controls (Split, Épura Full Screen, 3D Full Screen, Collapse) -->
+      <div class="view-switcher">
+        <button id="btnViewSplit" class="view-btn active" onclick="setLayoutMode('split')" title="Visualização simultânea da Épura e do Espaço 3D">
+          <span>⊞</span> Vista Dividida
+        </button>
+        <button id="btnViewEpura" class="view-btn" onclick="setLayoutMode('epura')" title="Modo preferencial de desenho e inserção na Épura">
+          <span>⛶</span> Épura Diédrica (Full Screen)
+        </button>
+        <button id="btnView3D" class="view-btn" onclick="setLayoutMode('3d')" title="Visualização espacial tridimensional dos diedros">
+          <span>⛶</span> Espaço 3D (Full Screen)
+        </button>
+        <div class="view-divider"></div>
+        <button id="btnToggleSidebar" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Colapsar ou expandir o painel de criação lateral">
+          <span>⇥</span> Colapsar Painel
+        </button>
+      </div>
+
+      <!-- Presets & Dual Pack Exporter -->
+      <div class="header-actions">
+        <select id="presetSelect" onchange="loadPreset(this.value)" class="preset-select" title="Carregar exercício curricular do 10.º ano">
+          <optgroup label="Exercícios Curriculares do 10.º Ano">
+            <option value="default">1. Reta Oblíqua e Traços F e H (Padrão)</option>
+            <option value="reta-nivel">2. Reta de Nível (Horizontal) e Traço F</option>
+            <option value="reta-frontal">3. Reta Frontal (de Frente) e Traço H</option>
+            <option value="reta-topo">4. Reta de Topo (⊥ φ₀) e Traço F</option>
+            <option value="reta-vertical">5. Reta Vertical (⊥ ν₀) e Traço H</option>
+            <option value="concorrentes">6. Retas Concorrentes r ∩ s (Ponto I)</option>
+            <option value="intersecao-plano">7. Interseção Reta r ∩ Plano Oblíquo α</option>
+            <option value="intersecao-planos">8. Interseção de Dois Planos α ∩ β</option>
+            <option value="plano-3pontos">9. Plano definido por 3 Pontos</option>
+            <option value="ponto-omitido">10. Ponto com Coordenada Omitida P(2; ?; 3)</option>
+          </optgroup>
+        </select>
+
+        <button onclick="exportDualPack()" class="btn-primary" title="Exportar simultaneamente folha do aluno (SVG 1:1), resolução do professor (SVG 1:1) e enunciado">
+          <span>⬇</span> Exportar Pack 1:1 (Aluno + Prof)
+        </button>
+      </div>
+    </header>
+
+    <!-- ======================================================================
+         SUB-TOOLBAR: DRAWING TOOLS, GRID, SNAP & REAL-TIME READOUT
+         ====================================================================== -->
+    <div class="sub-toolbar">
+      <!-- Mouse Interaction Mode -->
+      <div class="tool-group">
+        <span class="tool-label">Modo Rato:</span>
+        <button id="toolSelect" onclick="setMouseTool('select')" class="tool-btn active">
+          <span>↖</span> Selecionar / Mover
+        </button>
+        <button id="toolInsertPoint" onclick="setMouseTool('point')" class="tool-btn">
+          <span>+</span> Inserir Ponto (2 Cliques: A₁ → A₂)
+        </button>
+        <span id="insertStatusBadge" class="status-badge" style="display: none;">
+          1.º Passo: Marcar projeção horizontal A₁ (define x e afastamento y)
+        </span>
+      </div>
+
+      <!-- Canvas Toggles: Snap, Grid, Student Sheet Preview, Sheet Format -->
+      <div class="canvas-toggles">
+        <label class="toggle-label" title="Encaixar pontos em múltiplos de 0,5 cm">
+          <input type="checkbox" id="chkSnap" checked onchange="state.snap05 = this.checked;" />
+          <span>Snap 0,5 cm</span>
+        </label>
+
+        <label class="toggle-label" title="Mostrar malha milimétrica de -15 a +15 cm">
+          <input type="checkbox" id="chkGrid" checked onchange="state.showGrid = this.checked; renderAll();" />
+          <span>Grelha (-15 a +15 cm)</span>
+        </label>
+
+        <label class="toggle-label" title="Ocultar elementos marcados como 'Objetivo a Determinar' para simular a folha entregue ao estudante">
+          <input type="checkbox" id="chkPreviewStudent" onchange="state.previewStudentSheet = this.checked; renderAll();" />
+          <span style="color: var(--c-darkblue); font-weight: 600;">Pré-visualizar Folha do Aluno</span>
+        </label>
+
+        <select id="sheetFormatSelect" onchange="setSheetFormat(this.value)" class="preset-select" style="font-size: 11px; padding: 3px 6px;">
+          <option value="300x300">Folha Quadrada (300 × 300 mm)</option>
+          <option value="a4-landscape">A4 Horizontal (297 × 210 mm)</option>
+          <option value="a4-portrait">A4 Vertical (210 × 297 mm)</option>
+        </select>
+
+        <!-- Coordinate Readout in Martian Mono -->
+        <div id="cursorCoords" class="coords-readout">
+          x: 0,0 | y: 0,0 | z: 0,0 cm
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================================
+         WORKSPACE AREA (VIEWPORTS + SIDEBAR)
+         ====================================================================== -->
+    <main class="workspace-wrapper">
+
+      <!-- Viewports Grid (Left/Center) -->
+      <div id="viewportsWrapper" class="viewports-container">
+
+        <!-- VIEWPORT 1: 2D DIHEDRAL SHEET (ÉPURA) -->
+        <section id="panelEpura" class="viewport-panel">
+          <div class="panel-header-tag">
+            <span class="tag-dot darkblue"></span>
+            <strong>Épura Diédrica (2D)</strong>
+            <span class="tag-meta">| Escala 1:1 (-15 a +15 cm) • +X Esquerda • +Z Cima • +Y Baixo</span>
+          </div>
+
+          <!-- Canvas Area with SVG -->
+          <div class="epura-canvas-area">
+            <svg id="epuraSvg" viewBox="-162 -162 324 324" class="epura-svg">
+              <g id="svgGridLayer"></g>
+              <g id="svgAxisLayer"></g>
+              <g id="svgConstructionLayer"></g>
+              <g id="svgProjectionsLayer"></g>
+              <g id="svgSolutionLayer"></g>
+              <g id="svgInteractiveLayer"></g>
+              <g id="svgLabelsLayer"></g>
+            </svg>
+          </div>
+
+          <!-- Zoom & Center Controls -->
+          <div class="canvas-zoom-controls">
+            <button onclick="zoomEpura(0.9)" class="zoom-btn" title="Diminuir Zoom">−</button>
+            <span id="zoomReadout" class="zoom-level-text">100%</span>
+            <button onclick="zoomEpura(1.1)" class="zoom-btn" title="Aumentar Zoom">+</button>
+            <button onclick="resetZoomEpura()" class="zoom-btn" style="border-left: 1px solid var(--c-border);" title="Ajustar ao Centro">⊡ Centrar</button>
+          </div>
+        </section>
+
+        <!-- VIEWPORT 2: 3D SPATIAL DIHEDRAL VIEW -->
+        <section id="panel3D" class="viewport-panel">
+          <div class="panel-header-tag" style="background-color: rgba(26,32,44,0.9); border-color: #2D3748; color: #FFFFFF;">
+            <span class="tag-dot cyan"></span>
+            <strong>Espaço 3D (Diedros φ₀ e ν₀)</strong>
+            <span class="tag-meta" style="color: #9CA3AF;">| Arrasta para rodar a câmara 3D</span>
+          </div>
+
+          <!-- 3D Canvas -->
+          <canvas id="canvas3D"></canvas>
+
+          <!-- Rebatimento Controls Bar -->
+          <div class="spatial-controls-bar">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="slider-label">Rebatimento de ν₀:</span>
+              <span id="rebAngleLabel" class="angle-badge">0° (Espaço)</span>
+            </div>
+
+            <input type="range" id="rebSlider" min="0" max="90" value="0" step="1"
+              oninput="updateRebatimento(this.value)"
+              class="rebatimento-slider"
+              title="Arrasta para rebater o plano horizontal ν0 sobre o plano frontal φ0" />
+
+            <button onclick="toggleRebatimentoAnim()" class="spatial-toggle-btn">
+              Alternar 0° / 90°
+            </button>
+
+            <div class="bisector-toggles">
+              <label title="Mostrar os planos bissetores β13 (y=z) e β24 (y=-z)">
+                <input type="checkbox" id="chkBissectors" checked onchange="state.showBisectors = this.checked; render3DView();" />
+                <span>Bissetores (β₁₃ e β₂₄)</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ====================================================================
+           RIGHT SIDEBAR: PATRÍCIA'S FORM BUILDER, INSPECTOR & STATEMENT GENERATOR
+           ==================================================================== -->
+      <aside id="rightSidebar" class="right-sidebar">
+
+        <!-- Synchronized Tabs Header -->
+        <div class="sidebar-tabs">
+          <button id="tabBtnBuilder" onclick="switchSidebarTab('builder')" class="tab-btn active">
+            Construtor por Blocos
+          </button>
+          <button id="tabBtnInspector" onclick="switchSidebarTab('inspector')" class="tab-btn">
+            Inspetor &amp; Propriedades
+          </button>
+          <button id="tabBtnStatement" onclick="switchSidebarTab('statement')" class="tab-btn">
+            Enunciado &amp; Solução
+          </button>
+        </div>
+
+        <!-- TAB 1 CONTENT: CONSTRUTOR POR BLOCOS -->
+        <div id="tabContentBuilder" class="sidebar-tab-content">
+          <!-- Add Block Bar -->
+          <div class="add-block-bar">
+            <div class="add-block-header">
+              <span class="add-block-title">Adicionar Elemento Geométrico</span>
+              <span style="font-size: 11px; color: var(--c-medgray);">Clique num elemento para destacar</span>
+            </div>
+            <div class="add-block-controls">
+              <select id="newBlockType" class="add-block-select">
+                <option value="point">+ Ponto — P(x; y; z)</option>
+                <option value="line">+ Reta — Definida por 2 Pontos ou Tipo</option>
+                <option value="plane">+ Plano — Por Traços Diretos ou 3 Pontos</option>
+                <option value="intersection">+ Interseção — Reta ∩ Plano ou Reta ∩ Reta</option>
+              </select>
+              <button onclick="addBlockFromDropdown()" class="btn-add-block">
+                + Adicionar
+              </button>
+            </div>
+          </div>
+
+          <!-- Dynamic Blocks Container -->
+          <div id="blocksContainer" class="blocks-list"></div>
+        </div>
+
+        <!-- TAB 2 CONTENT: INSPETOR & COORDENADAS -->
+        <div id="tabContentInspector" class="sidebar-tab-content" style="display: none;">
+          <div id="inspectorContainer" class="inspector-container"></div>
+        </div>
+
+        <!-- TAB 3 CONTENT: STATEMENT DETAIL VIEW -->
+        <div id="tabContentStatement" class="sidebar-tab-content" style="display: none; padding: 14px; background-color: var(--c-offwhite); gap: 10px;">
+          <div style="background-color: var(--c-white); border: 1px solid var(--c-border); padding: 12px; border-radius: 2px;">
+            <h3 style="font-size: 12px; font-weight: 700; color: var(--c-darkblue); text-transform: uppercase; margin-bottom: 8px;">
+              Configuração Pedagógica de Omissões
+            </h3>
+            <p style="font-size: 12px; color: var(--c-darkgray); line-height: 1.5; margin-bottom: 10px;">
+              Cada bloco no <strong>Construtor</strong> dispõe de caixas de seleção para definir o papel de cada coordenada:
+            </p>
+            <ul style="font-size: 11px; color: var(--c-darkgray); padding-left: 18px; line-height: 1.6;">
+              <li><strong>[x] Dar (Abcissa/Afastamento/Cota):</strong> Permite omitir uma coordenada específica, substituindo-a por <code class="mono" style="background:#E9ECEF; padding:1px 4px;">?</code> (ex: ponto pertencente a um plano).</li>
+              <li><strong>[x] Dado no Enunciado:</strong> Inclui o elemento nos dados iniciais fornecidos ao estudante.</li>
+              <li><strong>[🎯] Objetivo a Determinar:</strong> Oculta o elemento da folha do estudante e formula automaticamente a pergunta do exame nacional.</li>
+            </ul>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button onclick="exportStudentSvgOnly()" class="btn-subtle" style="flex: 1; justify-content: center;">
+              Folha do Aluno (SVG)
+            </button>
+            <button onclick="exportTeacherSvgOnly()" class="btn-subtle" style="flex: 1; justify-content: center;">
+              Resolução Professor (SVG)
+            </button>
+          </div>
+        </div>
+
+        <!-- PEDAGOGICAL STATEMENT PANEL (PERMANENT FOOTER IN SIDEBAR) -->
+        <div class="statement-panel">
+          <div class="statement-header">
+            <div class="statement-title">
+              <span class="indicator-dot"></span>
+              <span>Enunciado Formal do Exame</span>
+            </div>
+            <button onclick="copyStatement()" class="btn-copy">
+              <span>📋</span> Copiar Enunciado
+            </button>
+          </div>
+
+          <textarea id="statementOutput" class="statement-textarea" spellcheck="false" placeholder="O enunciado em português oficial do exame de GDA é gerado automaticamente..."></textarea>
+
+          <div id="teacherSolutionSummary" class="teacher-key-summary">
+            Chave Professor: Coordenadas calculadas prontas para exportação 1:1
+          </div>
+        </div>
+
+      </aside>
+
+    </main>
+
+  </div>
+
+  <!-- Application Logic Modules -->
+  <script src="src/js/geometry.js"></script>
+  <script src="src/js/state.js"></script>
+  <script src="src/js/epura.js"></script>
+  <script src="src/js/diedros3d.js"></script>
+  <script src="src/js/formBuilder.js"></script>
+  <script src="src/js/inspector.js"></script>
+  <script src="src/js/statement.js"></script>
+  <script src="src/js/export.js"></script>
+
+  <!-- Application Initialization & Layout Handlers -->
+  <script>
+    let currentZoom = 1.0;
+
+    function setLayoutMode(mode) {
+      state.layoutMode = mode;
+      const container = document.getElementById('viewportsWrapper');
+      const btnSplit = document.getElementById('btnViewSplit');
+      const btnEpura = document.getElementById('btnViewEpura');
+      const btn3D = document.getElementById('btnView3D');
+
+      [btnSplit, btnEpura, btn3D].forEach(b => { if (b) b.classList.remove('active'); });
+
+      if (container) {
+        container.classList.remove('mode-epura', 'mode-3d');
+        if (mode === 'epura') {
+          container.classList.add('mode-epura');
+          if (btnEpura) btnEpura.classList.add('active');
+        } else if (mode === '3d') {
+          container.classList.add('mode-3d');
+          if (btn3D) btn3D.classList.add('active');
+        } else {
+          if (btnSplit) btnSplit.classList.add('active');
+        }
+      }
+
+      setTimeout(() => {
+        if (typeof render3DView === 'function') render3DView();
+      }, 50);
+    }
+
+    function toggleSidebar() {
+      state.sidebarOpen = !state.sidebarOpen;
+      const sb = document.getElementById('rightSidebar');
+      const btn = document.getElementById('btnToggleSidebar');
+
+      if (sb) {
+        if (state.sidebarOpen) {
+          sb.classList.remove('collapsed');
+          if (btn) btn.innerHTML = '<span>⇥</span> Colapsar Painel';
+        } else {
+          sb.classList.add('collapsed');
+          if (btn) btn.innerHTML = '<span>⇤</span> Mostrar Painel';
+        }
+      }
+
+      setTimeout(() => {
+        if (typeof render3DView === 'function') render3DView();
+      }, 50);
+    }
+
+    function switchSidebarTab(tab) {
+      state.activeTab = tab;
+      const btnB = document.getElementById('tabBtnBuilder');
+      const btnI = document.getElementById('tabBtnInspector');
+      const btnS = document.getElementById('tabBtnStatement');
+      const cntB = document.getElementById('tabContentBuilder');
+      const cntI = document.getElementById('tabContentInspector');
+      const cntS = document.getElementById('tabContentStatement');
+
+      [btnB, btnI, btnS].forEach(b => { if (b) b.classList.remove('active'); });
+      [cntB, cntI, cntS].forEach(c => { if (c) c.style.display = 'none'; });
+
+      if (tab === 'builder') {
+        if (btnB) btnB.classList.add('active');
+        if (cntB) cntB.style.display = 'flex';
+      } else if (tab === 'inspector') {
+        if (btnI) btnI.classList.add('active');
+        if (cntI) cntI.style.display = 'flex';
+        renderInspectorTab();
+      } else if (tab === 'statement') {
+        if (btnS) btnS.classList.add('active');
+        if (cntS) cntS.style.display = 'flex';
+      }
+    }
+
+    function setSheetFormat(format) {
+      state.sheetFormat = format;
+      const svg = document.getElementById('epuraSvg');
+      if (!svg) return;
+
+      if (format === 'a4-landscape') {
+        svg.setAttribute('viewBox', '-158 -115 316 230');
+      } else if (format === 'a4-portrait') {
+        svg.setAttribute('viewBox', '-115 -158 230 316');
+      } else {
+        svg.setAttribute('viewBox', '-162 -162 324 324');
+      }
+      renderAll();
+    }
+
+    function zoomEpura(factor) {
+      currentZoom = Math.max(0.5, Math.min(2.5, currentZoom * factor));
+      const svg = document.getElementById('epuraSvg');
+      const readout = document.getElementById('zoomReadout');
+      if (svg) svg.style.transform = `scale(${currentZoom})`;
+      if (readout) readout.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    function resetZoomEpura() {
+      currentZoom = 1.0;
+      const svg = document.getElementById('epuraSvg');
+      const readout = document.getElementById('zoomReadout');
+      if (svg) svg.style.transform = 'scale(1)';
+      if (readout) readout.textContent = '100%';
+    }
+
+    function renderAll() {
+      render2DEpura(epuraSvg, state.previewStudentSheet, false);
+      render3DView();
+      renderSidebarBlocks();
+      renderInspectorTab();
+      generatePortugueseStatement();
+    }
+
+    // App Startup
+    window.addEventListener('DOMContentLoaded', () => {
+      initEpura();
+      init3DView();
+      loadPreset('default');
+    });
+  </script>
+</body>
+</html>
